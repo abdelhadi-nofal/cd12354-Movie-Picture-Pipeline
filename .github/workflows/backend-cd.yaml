@@ -1,68 +1,62 @@
-name: Frontend Continuous Deployment
+name: Backend Continuous Deployment
 
 on:
   push:
     branches: [main]
-    paths: [starter/frontend/**]
+    paths: [starter/backend/**]
   workflow_dispatch:
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  REACT_APP_MOVIE_API_URL: ${{ secrets.REACT_APP_MOVIE_API_URL }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Python
+        uses: actions/setup-python@v3
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: starter/frontend/package-lock.json
+          python-version: 3.9
+      - name: Install Pipenv
+        run: pip install pipenv
       - name: Install Dependencies
-        run: cd starter/frontend && npm ci
+        working-directory: starter/backend
+        run: pipenv install --dev
       - name: Run Linter
-        run: cd starter/frontend && npm run lint
+        working-directory: starter/backend
+        run: pipenv run flake8 .
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Python
+        uses: actions/setup-python@v3
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: starter/frontend/package-lock.json
+          python-version: 3.9
+      - name: Install Pipenv
+        run: pip install pipenv
       - name: Install Dependencies
-        run: cd starter/frontend && npm ci
+        working-directory: starter/backend
+        run: pipenv install
       - name: Run Tests
-        run: cd starter/frontend && npm test
+        working-directory: starter/backend
+        run: pipenv run python -m pytest
 
   build:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v3
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-      - name: Build and Push Docker Image
+      - name: Build Docker Image
+        working-directory: starter/backend
         run: |
-          cd starter/frontend
           docker buildx create --name mybuilder || true
           docker buildx use mybuilder
           docker buildx build \
             --platform=linux/amd64 \
-            --build-arg REACT_APP_MOVIE_API_URL=$REACT_APP_MOVIE_API_URL \
-            -t ${{ env.ECR_REGISTRY }}/frontend:${GITHUB_SHA} \
+            -t ${{ env.ECR_REGISTRY }}/backend:${GITHUB_SHA} \
             --push .
 
   deploy:
@@ -87,6 +81,6 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" | base64 --decode > ~/.kube/config
       - name: Deploy with Kustomize
         run: |
-          cd starter/frontend/k8s
-          kustomize edit set image frontend=${{ env.ECR_REGISTRY }}/frontend:${GITHUB_SHA}
+          cd starter/backend/k8s
+          kustomize edit set image backend=${{ env.ECR_REGISTRY }}/backend:${GITHUB_SHA}
           kustomize build | kubectl apply -f -
