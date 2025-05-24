@@ -1,5 +1,3 @@
-# starter/backend/Dockerfile
-# Use official Python image
 FROM python:3.9-slim
 
 # Install system dependencies
@@ -12,10 +10,13 @@ WORKDIR /app
 COPY Pipfile Pipfile.lock ./
 
 # Install pipenv and dependencies
-RUN pip install pipenv && pipenv install
+RUN pip install pipenv && pipenv install --system --deploy
 
-# Copy application code
-COPY . .
+# Verify /app contents before copying
+RUN ls -la /app
+
+# Explicitly copy application code to /app
+COPY ./app.py /app/
 
 # Run the app
-CMD ["pipenv", "run", "python", "app.py"]
+CMD ["python", "/app/app.py"]
