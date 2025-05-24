@@ -70,15 +70,18 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v3
-      - name: Ensure AWS CLI is Installed
+      - name: Install or Update AWS CLI
         run: |
-          if ! aws --version | grep -q 'aws-cli/2'; then
-            echo "AWS CLI not found or outdated. Installing..."
+          if aws --version | grep -q 'aws-cli/2'; then
+            echo "AWS CLI version 2 detected. Updating..."
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install --update
+          else
+            echo "AWS CLI not detected or version is not 2. Installing..."
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip
             sudo ./aws/install
-          else
-            echo "AWS CLI is already installed and up-to-date."
           fi
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -94,3 +97,4 @@ jobs:
           cd starter/frontend/k8s
           kustomize edit set image frontend=${{ env.ECR_REGISTRY }}/frontend:${GITHUB_SHA}
           kustomize build | kubectl apply -f -
+
