@@ -1,21 +1,9 @@
 # starter/backend/Dockerfile
-# Use official Python image
-FROM python:3.9-slim
+FROM --platform=linux/amd64 python:3.9-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y gcc python3-dev
-
-# Set working directory
 WORKDIR /app
-
-# Copy Pipfile and lock file
 COPY Pipfile Pipfile.lock ./
-
-# Install pipenv and dependencies
-RUN pip install pipenv && pipenv install --dev
-
-# Copy application code
+RUN pip install pipenv && pipenv install --system --deploy
 COPY . .
 
-# Run the app
-CMD ["pipenv", "run", "python", "app.py"]
+CMD ["python", "app.py"]
