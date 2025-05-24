@@ -1,0 +1,106 @@
+name: Frontend Continuous Deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - './starter/frontend/**'
+
+defaults:
+  run:
+    working-directory: ./starter/frontend
+
+jobs:
+  linting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'latest'
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm ci
+      - name: Run linter
+        run: npm run lint
+        
+  test:
+    needs: [linting]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'latest'
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('starter/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: CI=true npm run test
+
+  build: 
+    needs: [test]
+    runs-on: ubuntu-latest
+    env:      
+      IMAGE_TAG: frontend:${{ github.sha }}
+      EKS_CLUSTER_NAME: cluster
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Set up Node.js 
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'latest'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build Docker image
+        env:
+          REACT_APP_MOVIE_API_URL: ${{ vars.REACT_APP_MOVIE_API_URL }}
+        run: docker build --build-arg REACT_APP_MOVIE_API_URL="http://$REACT_APP_MOVIE_API_URL/" --tag=$IMAGE_TAG .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-to-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag the Docker image
+        run: |
+          docker tag $IMAGE_TAG ${{ steps.login-to-ecr.outputs.registry }}/$IMAGE_TAG
+      - name: Push the Docker image to ECR
+        run: |
+          docker push ${{ steps.login-to-ecr.outputs.registry }}/$IMAGE_TAG
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region us-east-1 --name $EKS_CLUSTER_NAME
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+      - name: Deploy Docker file to Kubernetes cluster      
+        run: |
+          cd ./k8s
+          kustomize edit set image frontend=${{ steps.login-to-ecr.outputs.registry }}/$IMAGE_TAG
+          kustomize build | kubectl apply -f -
