@@ -70,11 +70,16 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v3
-      - name: Install or Update AWS CLI
+      - name: Ensure AWS CLI is Installed
         run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
+          if ! aws --version | grep -q 'aws-cli/2'; then
+            echo "AWS CLI not found or outdated. Installing..."
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+          else
+            echo "AWS CLI is already installed and up-to-date."
+          fi
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
