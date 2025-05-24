@@ -64,23 +64,22 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v3
-      - name: Install AWS CLI
+      - name: Install or Update AWS CLI
         run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip " -o "awscliv2.zip"
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip awscliv2.zip
-          sudo ./aws/install
+          sudo ./aws/install --update
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-      - name: Configure Kubeconfig
+      - name: Generate Kubeconfig
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > ~/.kube/config
+          aws eks update-kubeconfig --name cluster --region us-east-1
       - name: Deploy with Kustomize
         run: |
-          cd starter/backend/k8s
-          kustomize edit set image backend=${{ env.ECR_REGISTRY }}/backend:${GITHUB_SHA}
+          cd starter/frontend/k8s
+          kustomize edit set image frontend=${{ env.ECR_REGISTRY }}/frontend:${GITHUB_SHA}
           kustomize build | kubectl apply -f -
